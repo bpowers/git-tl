@@ -75,7 +75,8 @@ def cmd_fetch(*args):
     pure_repo = hg.repository(ui, path=pure_dir)
     # FIXME: use the api...
     subprocess.call('cd %s && hg pull' % pure_dir, shell=True)
-    fast_import(pure_dir)
+    fast_import(pure_dir, join('.git', 'hg-remote'))
+    subprocess.call('git fetch', shell=True)
 
 def cmd_push(*args):
     curr_branch = get_current_branch()
