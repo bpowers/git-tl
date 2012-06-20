@@ -1,2 +1,29 @@
 #!/usr/bin/env python
 
+import argparse
+
+
+def cmd_clone(args):
+    print 'clonez'
+
+def cmd_fetch(args):
+    pass
+
+COMMANDS = {
+    'clone': cmd_clone,
+    'fetch': cmd_fetch,
+}
+
+def main():
+    p = argparse.ArgumentParser(
+        usage = 'git tl [-h] <command> [<args>]',
+        description = 'A git interface to mercurial.  hg++.',
+    )
+
+    p.add_argument('cmd', nargs='+', help='<%s>' % ('|'.join(COMMANDS)))
+
+    args = p.parse_args()
+    print repr(globals())
+
+if __name__ == '__main__':
+    exit(main())
