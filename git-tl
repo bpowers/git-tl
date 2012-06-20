@@ -1,20 +1,69 @@
 #!/usr/bin/env python
 
 import argparse
+import os
 import os.path
+import subprocess
+
+from dulwich.repo import Repo
+from mercurial import hg, ui as uimod
+from os.path import dirname, basename, abspath, join
+from sys import stderr
+
+def slurp(filepath):
+    with open(filepath, 'r') as f:
+        return f.read()
+
+def get_support_dir():
+    return join(dirname(abspath(__file__)), 'tl-support')
+
+def fast_import(dst):
+    path = join(get_support_dir(), 'fast-export', 'hg-fast-export.sh')
+    cmdset = '%s -r %s' % (
+        abspath(path),
+        abspath(dst),
+    )
+    subprocess.call(cmdset, shell=True)
 
 def cmd_clone(src, dst=None):
-    print 'clonez'
+    '''
+    Clones the given mercurial repository.
+    '''
+    if not dst:
+        dst = basename(src)
+    if os.path.exists(dst):
+        stderr.write('fatal: destination "%s" exists.\n' % (dst,))
+        return 1
+    os.mkdir(dst)
+    r = Repo.init(dst)
+    ui = uimod.ui()
+    hg_dst = abspath(join(dst, '.git', 'hg-pure'))
+    hg.clone(
+        ui,
+        {}, # peeropts
+        source=src,
+        dest=hg_dst,
+        update=False
+    )
+    os.chdir(dst)
+    fast_import(hg_dst)
+    subprocess.call('git reset --hard', shell=True)
 
 def cmd_fetch(*args):
-    print 'fetchz'
+    curr_branch = slurp(join('.git', 'HEAD')).split('/')[-1].strip()
+    if curr_branch == 'master':
+        curr_branch = 'default'
+    git_repo = Repo('.')
+    ui = uimod.ui()
+    pure_repo = hg.repository(ui, path=join('.git', 'hg-pure'))
+    print 'fetchz (%s)' % curr_branch
 
 COMMANDS = {k[4:]: v for k, v in globals().iteritems() if k.startswith('cmd_')}
 
 def main():
     p = argparse.ArgumentParser(
-        usage = 'git tl [-h] <command> [<args>]',
-        description = 'A git interface to mercurial.  hg++.',
+        usage='git tl [-h] <command> [<args>]',
+        description='A git interface to mercurial.  hg++.',
     )
 
     p.add_argument('cmd', nargs='+', help='<%s>' % ('|'.join(COMMANDS)))
@@ -27,10 +76,10 @@ def main():
 
     cmd = COMMANDS[cmd_name]
     try:
-        cmd(*cmd_args)
+        return cmd(*cmd_args)
     except TypeError, e:
         # print the error, but not the traceback
-        print 'fatal: %s' % (e,)
+        stderr.write('fatal: %s\n' % (e,))
         return 1
 
 if __name__ == '__main__':
