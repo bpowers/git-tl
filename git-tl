@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import mercurial.commands
 import os
 import os.path
 import subprocess
@@ -14,14 +15,18 @@ def slurp(filepath):
     with open(filepath, 'r') as f:
         return f.read()
 
+def get_current_branch(repo_path='.'):
+    return slurp(join(repo_path, '.git', 'HEAD')).split('/')[-1].strip()
+
 def get_support_dir():
     return join(dirname(abspath(__file__)), 'tl-support')
 
-def fast_import(dst):
-    path = join(get_support_dir(), 'fast-export', 'hg-fast-export.sh')
-    cmdset = '%s -r %s' % (
-        abspath(path),
-        abspath(dst),
+def fast_import(hg_dir, git_dir='.'):
+    exe_path = join(get_support_dir(), 'fast-export', 'hg-fast-export.sh')
+    cmdset = 'cd %s && %s -r %s' % (
+        abspath(git_dir),
+        abspath(exe_path),
+        abspath(hg_dir),
     )
     subprocess.call(cmdset, shell=True)
 
@@ -34,10 +39,16 @@ def cmd_clone(src, dst=None):
     if os.path.exists(dst):
         stderr.write('fatal: destination "%s" exists.\n' % (dst,))
         return 1
-    os.mkdir(dst)
-    r = Repo.init(dst)
+
+    git_repo = Repo.init(dst, mkdir=True)
+    os.chdir(dst)
+
+    git_remote_dir = join('.git', 'hg-remote')
+    os.mkdir(git_remote_dir)
+    git_remote = Repo.init_bare(git_remote_dir)
+
     ui = uimod.ui()
-    hg_dst = abspath(join(dst, '.git', 'hg-pure'))
+    hg_dst = abspath(join('.git', 'hg-pure'))
     hg.clone(
         ui,
         {}, # peeropts
@@ -45,18 +56,32 @@ def cmd_clone(src, dst=None):
         dest=hg_dst,
         update=False
     )
-    os.chdir(dst)
-    fast_import(hg_dst)
-    subprocess.call('git reset --hard', shell=True)
+
+    fast_import(hg_dst, git_remote.path)
+    subprocess.call('''
+        git remote add hg .git/hg-remote &&
+        git config hg.tracking.master master &&
+        git config branch.master.remote hg &&
+        git fetch &&
+        git branch --set-upstream master hg/master &&
+        git pull &&
+        git reset --hard
+    ''',
+                    shell=True)
 
 def cmd_fetch(*args):
-    curr_branch = slurp(join('.git', 'HEAD')).split('/')[-1].strip()
+    ui = uimod.ui()
+    pure_dir = join('.git', 'hg-pure')
+    pure_repo = hg.repository(ui, path=pure_dir)
+    # FIXME: use the api...
+    subprocess.call('cd %s && hg pull' % pure_dir, shell=True)
+    fast_import(pure_dir)
+
+def cmd_push(*args):
+    curr_branch = get_current_branch()
     if curr_branch == 'master':
         curr_branch = 'default'
     git_repo = Repo('.')
-    ui = uimod.ui()
-    pure_repo = hg.repository(ui, path=join('.git', 'hg-pure'))
-    print 'fetchz (%s)' % curr_branch
 
 COMMANDS = {k[4:]: v for k, v in globals().iteritems() if k.startswith('cmd_')}
 
