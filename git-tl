@@ -21,7 +21,7 @@ def get_current_branch(repo_path='.'):
 def get_support_dir():
     return join(dirname(abspath(__file__)), 'tl-support')
 
-def fast_import(hg_dir, git_dir='.'):
+def fast_import(hg_dir, git_dir):
     exe_path = join(get_support_dir(), 'fast-export', 'hg-fast-export.sh')
     cmdset = 'cd %s && %s -r %s' % (
         abspath(git_dir),
@@ -83,6 +83,7 @@ def cmd_push(*args):
     if curr_branch == 'master':
         curr_branch = 'default'
     git_repo = Repo('.')
+    print 'current: %s' % curr_branch
 
 COMMANDS = {k[4:]: v for k, v in globals().iteritems() if k.startswith('cmd_')}
 
